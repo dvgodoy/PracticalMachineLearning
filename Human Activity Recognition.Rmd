@@ -1,0 +1,80 @@
+Human Activity Recognition
+==========================
+
+We use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and our goal is to predict the manner in which the participants did barbell lifts, correctly and incorrectly in 5 different ways, denoted by the "classe" variable in the training set. 
+
+## Loading Data
+First we load the necessary packages and the training and testing datasets. There are 19,622 rows and 160 variables in the training set. A quick summary shows a lot of blank and NA values in several variables. The testing set contains just 20 rows and the same 160 variables as the training set.
+```{r message=FALSE,warning=FALSE}
+library(caret)
+library(randomForest)
+training = read.csv('pml-training.csv',header=TRUE)
+testing = read.csv('pml-testing.csv',header=TRUE)
+```
+
+## Cleaning up
+We focus on the 144 variables related to subject's sensors in the belt (36), arm (36), dumbbell (36) and forearm (36).
+For each group of variables corresponding to a body part we keep only those variables with no blank and no NA values, that is, 52 variables divided evenly among the 4 body parts.
+The outcome to be predicted is given by the variable 'classe'.
+```{r}
+belt = training[,grep('_belt',names(training))]
+belt = belt[,colSums(is.na(belt))==0]
+belt = belt[,colSums(belt=='')==0]
+arm = training[,grep('_arm',names(training))]
+arm = arm[,colSums(is.na(arm))==0]
+arm = arm[,colSums(arm=='')==0]
+dumbbell = training[,grep('_dumbbell',names(training))]
+dumbbell = dumbbell[,colSums(is.na(dumbbell))==0]
+dumbbell = dumbbell[,colSums(dumbbell=='')==0]
+forearm = training[,grep('_forearm',names(training))]
+forearm = forearm[,colSums(is.na(forearm))==0]
+forearm = forearm[,colSums(forearm=='')==0]
+var.belt = colnames(belt)
+var.arm = colnames(arm)
+var.dumbbell = colnames(dumbbell)
+var.forearm = colnames(forearm)
+```
+So we build our tidy training and testing sets as follows:
+```{r}
+new.outcome = training[,'classe']
+new.training = data.frame(belt,arm,dumbbell,forearm)
+colnames(new.training) = c(var.belt,var.arm,var.dumbbell,var.forearm)
+new.data = data.frame(new.training, classe=new.outcome)
+
+new.testing = testing[,c(var.belt,var.arm,var.dumbbell,var.forearm)]
+colnames(new.testing) = c(var.belt,var.arm,var.dumbbell,var.forearm)
+```
+
+## Training
+In order to do the training we choose the Random Forest method which is known to make highly accurate predictions. We set its number of trees to 200 and define a 3-fold cross-validation method in the train control.
+```{r}
+set.seed(323)
+(fit = train(classe~.,data=new.data,method="rf",ntree=200,trControl=trainControl(method="cv",number=3,allowParallel=TRUE)))
+(model = fit$finalModel)
+```
+The selected model has mtry = 2 and an accuracy of 99.32219% as it can be seen in the following plot:
+```{r fig.width=6, fig.height=3}
+plot(fit)
+```
+The figure below shows the importance of the variables:
+```{r fig.width=6, fig.height=8}
+varImpPlot(model)
+```
+The OOB error rate is 0.4790541% corresponding to 94 misclassifications. We should expect a higher error rate when doing real prediction with the testing set.
+The following plot shows the accuracy attained by the growing number of trees while predicting out of sample outcomes through cross-validation.
+```{r fig.width=6, fig.height=8}
+layout(matrix(c(1,2),nrow=1),
+       width=c(4,1)) 
+par(mar=c(5,4,4,0)) 
+plot(model, log="y")
+par(mar=c(5,0,4,2)) 
+plot(c(0,1),type="n", axes=F, xlab="", ylab="")
+legend("top", colnames(model$err.rate),col=1:6,cex=0.8,fill=1:6)
+```
+
+### Prediction
+Finally, we use our trained model in order to predict the outcomes for the testing set. Considering our OOB error rate, we should expect at least 1 misclassification every 208 cases.
+```{r}
+(pred = predict(fit,new.testing))
+```
+Our testing set has just 20 cases and, as it turns out, our model was able to predict correctly each and every one of them.
